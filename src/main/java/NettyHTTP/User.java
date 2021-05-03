@@ -6,15 +6,11 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.concurrent.TimeoutException;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
-
-import com.rabbitmq.client.AMQP.BasicProperties;
 import com.rabbitmq.client.BuiltinExchangeType;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
-import com.rabbitmq.client.DeliverCallback;
 
 import UserService.GetUser;
 
@@ -22,35 +18,22 @@ public class User {
 	static JSONObject request;
 	static String uri;
 	static DAL data=new DAL();
-	static Channel channel;
+	
 // rabbitMQ
 	private final static String GET_PROFILE_QUEUE_NAME = "get_profile";
 	private final static String USER_EXCHANGE_NAME =  "user_exchange";
-	public User(String uri, JSONObject request) throws IOException, TimeoutException {
+	public User(String uri, JSONObject request) {
 		this.request=request;
 		this.uri=uri;
-		ConnectionFactory factory = new ConnectionFactory();
-	    factory.setHost("localhost");
-	    Connection connection = factory.newConnection();
-	    this.channel = connection.createChannel();
-	    channel.exchangeDeclare(USER_EXCHANGE_NAME, "direct");
-	    GetUser user=new GetUser();
 	}
 	
 	public void route() throws IOException, TimeoutException{
+		Channel channel = connect(USER_EXCHANGE_NAME);
 		switch (uri) {
 		case "login": {
-			 send(USER_EXCHANGE_NAME, GET_PROFILE_QUEUE_NAME, request.toString().getBytes());
-			  DeliverCallback deliverCallback = (consumerTag, delivery) -> {
-				  	System.out.println("1");
-			    	JSONObject json=new JSONObject(new String(delivery.getBody()));
-			    	System.out.println("2");
-			    	JSONArray array = null;
-			    	System.out.println("3");
-					array = new JSONArray(json);
-					System.out.println("4");
-			    };
-			 channel.basicConsume(GET_PROFILE_QUEUE_NAME + "_RESPONSE", true, deliverCallback, consumerTag -> { });
+			 send(USER_EXCHANGE_NAME, GET_PROFILE_QUEUE_NAME, GET_PROFILE_QUEUE_NAME, request.toString().getBytes());
+			 GetUser user=new GetUser();
+			 user.deQueue(USER_EXCHANGE_NAME, GET_PROFILE_QUEUE_NAME);
 			 break;
 		}
 		case "signup":{
@@ -63,25 +46,36 @@ public class User {
 	}
 	
 	
-	
 	private static ArrayList<JSONObject> Signup(JSONObject request2) {
 		return data.writeSQL(request2, "Users");
 	}
 	
-	
-
-	
-	public static void send(String EXCHANGE_NAME, String QUEUE_NAME, byte[] payload) throws IOException, TimeoutException {
+	public static Channel connect(String EXCHANGE_NAME) throws IOException, TimeoutException
+	{
 		
-		System.out.println("1");
-		BasicProperties props = new BasicProperties
-                .Builder()
-                .replyTo("QUEUE_NAME" + "_RESPONSE")
-                .build();
-			channel.queueDeclare(QUEUE_NAME + "_REQUEST", true, false, false, null);
-			 channel.queueBind( QUEUE_NAME + "_REQUEST", EXCHANGE_NAME, QUEUE_NAME + "_REQUEST");
-            channel.basicPublish(EXCHANGE_NAME, QUEUE_NAME + "_REQUEST", props, payload);	
-           
+		ConnectionFactory factory = new ConnectionFactory();
+        factory.setHost("localhost");
+        try (Connection connection = factory.newConnection();
+             Channel channel = connection.createChannel()) {
+        	
+        return channel;
+        }
+	}
+	
+	public static void send(String EXCHANGE_NAME,
+							String KEY, String QUEUE_NAME, byte[] payload) throws IOException, TimeoutException {
+		
+		ConnectionFactory factory = new ConnectionFactory();
+        factory.setHost("localhost");
+        try (Connection connection = factory.newConnection();
+             Channel channel = connection.createChannel()) {
+        	channel.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.DIRECT);
+        	channel.queueDeclare(QUEUE_NAME, true, false, false, null);
+        	channel.queueBind(QUEUE_NAME, EXCHANGE_NAME, KEY);
+        	channel.basicPublish(EXCHANGE_NAME, KEY, null, payload);	
+        	
+        
+        }
 	}
 	
 

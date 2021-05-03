@@ -16,7 +16,7 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.DeliverCallback;
-//import org.apache.commons.io.IOUtils;
+import org.apache.commons.io.IOUtils;
 
 
 
@@ -25,7 +25,7 @@ public class GetUser implements Runnable {
 	
 	private final static String GET_PROFILE_QUEUE_NAME = "get_profile";
 	private final static String USER_EXCHANGE_NAME =  "user_exchange";
-	static Channel channel;
+	
 	
 	public static ArrayList<JSONObject> getUser(JSONObject request) throws IOException, TimeoutException {	
 		return data.readSQL(request, "Users");
@@ -37,36 +37,27 @@ public class GetUser implements Runnable {
 		
 	}
 	
-	public GetUser() throws IOException, TimeoutException{
+	public static void deQueue(String EXCHANGE_NAME, String QUEUE_NAME) throws IOException, TimeoutException{
 		ConnectionFactory factory = new ConnectionFactory();
 	    factory.setHost("localhost");
 	    Connection connection = factory.newConnection();
-	    this.channel = connection.createChannel();
-	    channel.exchangeDeclare(USER_EXCHANGE_NAME, "direct");
-	    channel.queueDeclare(GET_PROFILE_QUEUE_NAME + "_RESPONSE", true, false, false, null);
-    	channel.queueBind( GET_PROFILE_QUEUE_NAME + "_RESPONSE", USER_EXCHANGE_NAME, GET_PROFILE_QUEUE_NAME + "_RESPONSE");
-    	
-    	DeliverCallback deliverCallback = (consumerTag, delivery) -> {
+	    Channel channel = connection.createChannel();
+	    channel.exchangeDeclare(EXCHANGE_NAME, "direct");
+	     byte[] data;
+	    
+	    DeliverCallback deliverCallback = (consumerTag, delivery) -> {
 	    	JSONObject json=new JSONObject(new String(delivery.getBody()));
 	    	ArrayList<JSONObject> array = null;
 			try {
 				array = getUser(json);
-				System.out.println(array.get(0).toString());
 			} catch (TimeoutException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-			byte[] payload = array.toString().getBytes();
-			
-			channel.basicPublish(USER_EXCHANGE_NAME,  GET_PROFILE_QUEUE_NAME + "_RESPONSE", null, payload);	
-		};
-	    
-	    channel.basicConsume(GET_PROFILE_QUEUE_NAME + "_REQUEST", true, deliverCallback, consumerTag -> { });
+	    	System.out.print(array.toString());
+	    };
+	    channel.basicConsume(QUEUE_NAME, true, deliverCallback, consumerTag -> { });
 	    
 	}
-	
-	
-	
 	
 	
 
